@@ -1,8 +1,8 @@
+import os
+import asyncio
 from agents import Agent, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, RunConfig, function_tool, RunContextWrapper
 from dotenv import load_dotenv
 from dataclasses import dataclass
-import os
-import asyncio
 from openai.types.responses import ResponseTextDeltaEvent
 from pydantic import BaseModel
 
@@ -39,10 +39,11 @@ class UserContext:
     phone: str
     address: str
 
-@function_tool
-async def get_user_context(wrapper: RunContextWrapper[UserContext]) -> str:
+async def get_user_context_func(wrapper: RunContextWrapper[UserContext]) -> str:
     user_context = wrapper.context
     return f"User Context:\nName: {user_context.name}\nEmail: {user_context.email}\nPhone: {user_context.phone}\nAddress: {user_context.address}"
+
+get_user_context_tool = function_tool(get_user_context_func)
 
 @function_tool
 def schedule_delivery(address: str, delivery_time: str, items: list[str]) -> DeliveryOutput:
@@ -61,19 +62,28 @@ async def main():
         address="123 Main St Apt 4B New York, NY 10001"
     )
 
+    user_context_str = await get_user_context_func(RunContextWrapper(user_data))
+    print("User Context:", user_context_str)
+
     agent = Agent[UserContext](
         name = "DeliveryAgent",
-        instructions = "You are a helpful assistant that helps users schedule deliveries. Ask for the delivery address, preferred delivery time, and items to be delivered.",
+        instructions = (
+            "You are a helpful assistant that helps users schedule deliveries. "
+            "You always take into account the user's context (name, email, phone, address) "
+            "from the provided UserContext. "
+            "Use this context when confirming or scheduling deliveries, instead of asking again."
+        ),
         output_type = DeliveryOutput,
-        tools = [schedule_delivery],
-        context = user_data,
-)
+        tools = [schedule_delivery, get_user_context_tool]
+    )
 
     result = Runner.run_streamed(
         agent,
-        input="Schedule a delivery to 123 Main St at 5 PM with a pizza and a coldrink.",
+        input="Schedule a delivery at 5 PM with a pizza and a coldrink.",
+        context=user_data,
         run_config = config
-)
+    )
+    
     async for event in result.stream_events():
         if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
             print(event.data.delta, end="", flush=True)
