@@ -56,8 +56,8 @@ def schedule_delivery(address: str, delivery_time: str, items: list[str]) -> Del
 async def main():
     user_data = UserContext(
         user_id=1,
-        name="John Doe",
-        email="john@gmail.com",
+        name="Ayesha",
+        email="ayesha@gmail.com",
         phone="123-456-7890",
         address="123 Main St Apt 4B New York, NY 10001"
     )
